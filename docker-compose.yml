@@ -1,16 +1,18 @@
 version: "3.0"
 
-# networks:
-#   smart-athletics:
-#     external: true
-
 services:
   app:
+    user: ${CURRENT_USER}
     build:
       context: .
       dockerfile: docker/Development/php.dockerfile
+      args:
+        - CURRENT_UID=${CURRENT_UID}
+        - CURRENT_USER=${CURRENT_USER}
     volumes:
       - .:/var/www
+      - ~/.ssh:${HOME}/.ssh
+      - ~/.gitconfig:${HOME}/.gitconfig
     working_dir: /var/www
     ports:
       - "8081:8081"
@@ -25,5 +27,68 @@ services:
       - .:/var/www
     depends_on:
       - app
-    # networks:
-    #   - smart-athletics
+      - database
+      - cache
+
+  composer:
+    user: ${CURRENT_USER}
+    build:
+      context: .
+      dockerfile: docker/Development/composer.dockerfile
+      args:
+        - CURRENT_UID=${CURRENT_UID}
+        - CURRENT_USER=${CURRENT_USER}
+    volumes:
+      - .:/var/www
+    working_dir: /var/www
+    depends_on:
+      - app
+    entrypoint: ["composer"]
+    environment:
+      PATH: "/root/.composer/vendor/bin:${PATH}"
+
+  artisan:
+    build:
+      context: .
+      dockerfile: docker/Development/artisan.dockerfile
+      args:
+        - CURRENT_UID=${CURRENT_UID}
+        - CURRENT_USER=${CURRENT_USER}
+    user: ${CURRENT_USER}
+    volumes:
+      - .:/var/www
+    working_dir: /var/www
+    entrypoint: ["php", "/var/www/artisan"]
+
+  node:
+    image: node:10
+    volumes:
+      - .:/var/www
+    working_dir: /var/www
+
+  database:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    volumes:
+      - dbdata:/var/lib/mysql
+    environment:
+      VIRTUAL_HOST: db.smart-athletics.dev
+      MYSQL_DATABASE: smart-athletics
+      MYSQL_USER: smart-athletics
+      MYSQL_PASSWORD: secret
+      MYSQL_ROOT_PASSWORD: secret
+      SERVICE_TAGS: dev
+      SERVICE_NAME: mysql
+    ports:
+      - "3306:3306"
+
+  cache:
+    image: redis:4.0
+    volumes:
+      - cachedata:/var/lib/redis
+    ports:
+      - "6379:6379"
+
+volumes:
+  dbdata:
+  cachedata:
